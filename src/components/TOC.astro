@@ -46,7 +46,7 @@ headings.forEach(heading => {
 <ul class="flex flex-col text-base list-none">
 	{
 		headings.map((heading: Heading) => (
-			<li id={`indicator-${heading.slug}`} class="group relative flex items-stretch h-6 [&.indicate>a]:font-bold [&.indicate>a]:text-primary">
+			<li data-indicator={heading.slug} class="group relative flex items-stretch h-6 [&.indicate>a]:font-bold [&.indicate>a]:text-primary">
 				<div class="flex select-none" aria-hidden="true">
 					{heading.lines?.map(line => (
 						<div class="w-4 relative flex justify-center">{line && <span class="absolute top-0 bottom-0 border-s border-remark" />}</div>
@@ -78,17 +78,16 @@ headings.forEach(heading => {
 	 * Sets up intersection observer to highlight current section in TOC
 	 */
 	function TOC() {
-		// Create a Map for efficient lookup of TOC indicators by heading slug
-		// Maps heading slug to corresponding TOC list item element
-		const indicators = new Map<string, Element>(
-			document
-				.querySelectorAll("li[id^='indicator-']") // Select all TOC indicator elements
-				.values()
-				.map(indicator => [
-					indicator.id.replace(/^indicator-/, ""), // Extract slug from "indicator-{slug}" format
-					indicator // Store the indicator element
-				])
-		);
+		// Map slug -> list of TOC elements (supports multiple TOC instances on a page)
+		const indicators = new Map<string, Element[]>();
+		document.querySelectorAll("li[data-indicator]").forEach(indicator => {
+			const slug = indicator.getAttribute("data-indicator");
+			if (!slug) return;
+
+			const list = indicators.get(slug);
+			if (list) list.push(indicator);
+			else indicators.set(slug, [indicator]);
+		});
 
 		// Disconnect previous observer to prevent memory leaks
 		observer?.disconnect();
@@ -101,7 +100,7 @@ headings.forEach(heading => {
 				if (!slug) return;
 
 				// Toggle "indicate" class on corresponding TOC item based on visibility
-				indicators.get(slug)?.classList.toggle("indicate", isIntersecting);
+				indicators.get(slug)?.forEach(indicator => indicator.classList.toggle("indicate", isIntersecting));
 			})
 		);
 

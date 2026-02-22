@@ -1,14 +1,20 @@
 ---
+import type { MarkdownHeading } from "astro";
 import Icon from "$components/Icon.svelte";
+import TOC from "$components/TOC.astro";
 import i18nit from "$i18n";
 
 export interface Props {
 	locale: string;
+	toc?: boolean;
+	headings?: MarkdownHeading[];
 }
 
-const { locale } = Astro.props;
+const { locale, toc = false, headings = [] } = Astro.props;
 
 const t = i18nit(locale);
+
+const showTOCDrawer = toc && headings.length > 0;
 ---
 
 <style>
@@ -41,7 +47,39 @@ const t = i18nit(locale);
 			<circle id="progress-circle" cx="50%" cy="50%" r="calc(50% - 1px)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"></circle>
 		</svg>
 	</button>
+	{
+		showTOCDrawer && (
+			<button id="toc-drawer-open" type="button" class="order-last sm:hidden" aria-label={t("note.contents")} aria-controls="toc-drawer" aria-expanded="false">
+				<Icon name="lucide--table-of-contents" size={18} title={t("note.contents")} />
+			</button>
+		)
+	}
 </figure>
+
+{
+	showTOCDrawer && (
+		<div id="toc-drawer" class="fixed inset-0 z-2000 sm:hidden pointer-events-none" aria-hidden="true">
+			<div data-toc-backdrop class="absolute inset-0 bg-black/40 opacity-0 transition-opacity"></div>
+			<aside data-toc-panel class="absolute top-0 end-0 h-screen w-2/3 bg-background border-s border-weak shadow-xl translate-x-full rtl:-translate-x-full transition-transform flex flex-col">
+				<header class="flex items-center justify-between p-3 border-b border-weak">
+					<h4>{t("note.contents")}</h4>
+					<button type="button" data-toc-close aria-label="Close" class="w-8 h-8 flex items-center justify-center rounded-full border border-weak text-secondary">
+						<Icon name="lucide--x" size={18} />
+					</button>
+				</header>
+				<nav class="grow overflow-y-auto p-3">
+					<TOC {headings} />
+				</nav>
+			</aside>
+		</div>
+	)
+}
+
+<style is:global>
+	html.toc-drawer-open {
+		overflow: hidden;
+	}
+</style>
 
 <script>
 	function updateProgress() {
@@ -87,4 +125,124 @@ const t = i18nit(locale);
 
 	window.addEventListener("scroll", updateProgress);
 	updateProgress();
+
+	function forceCloseTOCDrawer() {
+		document.documentElement.classList.remove("toc-drawer-open");
+
+		const openButton = document.getElementById("toc-drawer-open");
+		if (openButton instanceof HTMLButtonElement) {
+			openButton.setAttribute("aria-expanded", "false");
+		}
+
+		const drawer = document.getElementById("toc-drawer");
+		if (!(drawer instanceof HTMLElement)) return;
+
+		drawer.setAttribute("aria-hidden", "true");
+		drawer.classList.add("pointer-events-none");
+
+		const backdrop = drawer.querySelector("[data-toc-backdrop]");
+		backdrop?.classList.add("opacity-0");
+		backdrop?.classList.remove("opacity-100");
+
+		const panel = drawer.querySelector("[data-toc-panel]");
+		if (panel) {
+			const rtl = document.documentElement.getAttribute("dir") === "rtl";
+			const openClass = "translate-x-0";
+			const closedClass = rtl ? "-translate-x-full" : "translate-x-full";
+			const oppositeClosedClass = rtl ? "translate-x-full" : "-translate-x-full";
+
+			panel.classList.add(closedClass);
+			panel.classList.remove(oppositeClosedClass);
+			panel.classList.remove(openClass);
+		}
+	}
+
+	function bindTOCDrawerGlobalHandlers() {
+		const key = "__thoughtlite_tocDrawerBound";
+		if ((globalThis as any)[key]) return;
+		(globalThis as any)[key] = true;
+
+		document.addEventListener("keydown", event => {
+			if (event.key !== "Escape") return;
+			if (!document.documentElement.classList.contains("toc-drawer-open")) return;
+			forceCloseTOCDrawer();
+		});
+
+		const mq = window.matchMedia("(min-width: 640px)");
+		const onMediaQuery = (event?: MediaQueryListEvent) => {
+			const matches = event ? event.matches : mq.matches;
+			if (matches) forceCloseTOCDrawer();
+		};
+
+		if (typeof mq.addEventListener === "function") mq.addEventListener("change", onMediaQuery);
+		// Safari < 14
+		else if (typeof (mq as any).addListener === "function") (mq as any).addListener(onMediaQuery);
+
+		onMediaQuery();
+	}
+
+	function initTOCDrawer() {
+		bindTOCDrawerGlobalHandlers();
+		forceCloseTOCDrawer();
+
+		const openButton = document.getElementById("toc-drawer-open");
+		const drawer = document.getElementById("toc-drawer");
+		if (!(openButton instanceof HTMLButtonElement) || !(drawer instanceof HTMLElement)) return;
+
+		if (openButton.dataset.bound === "true") return;
+		openButton.dataset.bound = "true";
+
+		const backdrop = drawer.querySelector("[data-toc-backdrop]");
+		const panel = drawer.querySelector("[data-toc-panel]");
+		const closeButton = drawer.querySelector("[data-toc-close]");
+
+		let lastActive: Element | null = null;
+
+		const open = () => {
+			lastActive = document.activeElement;
+
+			drawer.setAttribute("aria-hidden", "false");
+			openButton.setAttribute("aria-expanded", "true");
+
+			drawer.classList.remove("pointer-events-none");
+			backdrop?.classList.remove("opacity-0");
+			backdrop?.classList.add("opacity-100");
+			if (panel) {
+				const rtl = document.documentElement.getAttribute("dir") === "rtl";
+				const openClass = "translate-x-0";
+				const closedClass = rtl ? "-translate-x-full" : "translate-x-full";
+				const oppositeClosedClass = rtl ? "translate-x-full" : "-translate-x-full";
+
+				panel.classList.remove(closedClass);
+				panel.classList.remove(oppositeClosedClass);
+				panel.classList.add(openClass);
+			}
+
+			document.documentElement.classList.add("toc-drawer-open");
+
+			const element = closeButton instanceof HTMLElement ? closeButton : null;
+			element?.focus?.();
+		};
+
+		const close = () => {
+			forceCloseTOCDrawer();
+
+			const element = lastActive instanceof HTMLElement ? lastActive : null;
+			element?.focus?.();
+		};
+
+		openButton.addEventListener("click", open);
+		backdrop?.addEventListener("click", close);
+		closeButton?.addEventListener("click", close);
+
+		panel?.addEventListener("click", event => {
+			const target = event.target instanceof Element ? event.target : null;
+			const link = target?.closest("a");
+			const href = link?.getAttribute("href");
+			if (href?.startsWith("#")) close();
+		});
+	}
+
+	initTOCDrawer();
+	document.addEventListener("astro:after-swap", initTOCDrawer);
 </script>
