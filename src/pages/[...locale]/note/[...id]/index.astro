@@ -74,7 +74,7 @@ const t = i18nit(locale);
 			<div class="flex gap-5">
 				<section id="markdown-content" class="markdown"><Content /></section>
 				{
-					note.data.toc && (
+					headings.length > 0 && (
 						<aside class="hidden sm:block sm:shrink-0 sm:w-50">
 							<div class="sticky top-3 flex flex-col gap-1">
 								<h4>{t("note.contents")}</h4>
@@ -88,6 +88,6 @@ const t = i18nit(locale);
 			</div>
 		</Sensitive>
 
-		<Position {locale} toc={note.data.toc} headings={headings} />
+		<Position {locale} headings={headings} />
 	</main>
 </Base>
